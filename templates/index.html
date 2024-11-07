@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Capstone</title>
+
+        <link rel="stylesheet" href="../static/style.css">
+
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
+
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    </head>
+
+    <body>
+        <div class="header">
+            <h1>Capstone</h1>
+        </div>
+        <div class="graph-content">
+            <!-- Placeholder for Plotly scatter plot -->
+            <div class="plot">
+                <h3>2D t-SNE Visualization of CLIP Features with CIFAR-10 Images</h3>
+                <div id="plot-2d"></div>
+            </div>
+            <div class="plot">
+                <h3>3D t-SNE Visualization of CLIP Features with CIFAR-10 Images</h3>
+                <div id="plot-3d"></div>
+            </div>
+        </div>
+        <div class="query-content">
+            <form method="POST" enctype="multipart/form-data">
+                <input type="file" name="image" accept="image/*">
+                <label for="k">Top-K:</label>
+                <select name="k">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+                <input type="submit" value="Upload">
+            </form>
+        </div>
+
+        {% if top_k %}
+        <div class="result-content">
+            <h2>Top {{ top_k|length }} Similar Images:</h2>
+            <div>
+                {% for img in top_k %}
+                <img src="{{ img }}" alt="Similar image" style="width: 100px; height: 100px;">
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <script type="text/javascript">
+            let graph2d = {{ graph_json_2d | safe }};
+            Plotly.newPlot('plot-2d', graph2d);
+
+            let graph3d = {{ graph_json_3d | safe }};
+            Plotly.newPlot('plot-3d', graph3d);
+        </script>
+    </body>
+</html>

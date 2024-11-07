@@ -1,0 +1,24 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# Ignore environment variables
+.env
+
+# Ignore Docker artifacts
+*.env
+*.log
+*.pid
+docker-compose.override.yml
+
+# Ignore data folder if it contains sensitive or large files
+data/
+
+# Ignore compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db

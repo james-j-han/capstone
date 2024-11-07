@@ -1,0 +1,58 @@
+body {
+    font-family: Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+}
+
+.header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100px;
+    width: 100%;
+    background-color: lightblue;
+}
+
+.main-content {
+    display: flex;
+    flex-direction: column;
+    background-color: lightpink;
+}
+
+.graph-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* background-color: lightpink; */
+}
+
+.plot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* background-color: lightpink; */
+    border-style: solid;
+    border-width: 2px;
+    border-radius: 10px;
+    margin: 20px;
+    padding: 10px;
+}
+
+.query-content {
+    display: flex;
+    background-color: lightpink;
+    margin: 10px;
+}
+
+.result-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* background-color: rgb(43, 147, 182); */
+    margin: 10px;
+}

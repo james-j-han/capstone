@@ -14,6 +14,8 @@ docker-compose.override.yml
 # Ignore data folder if it contains sensitive or large files
 data/
 
+images/
+
 # Ignore compiled files
 *.pyc
 *.pyo
@@ -22,3 +24,6 @@ data/
 # Ignore OS-specific files
 .DS_Store
 Thumbs.db
+
+*.npy
+*.pkl

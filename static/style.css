@@ -29,6 +29,12 @@ body {
     /* background-color: lightpink; */
 }
 
+.graph-container {
+    width: 100%;
+    height: 400px;
+    margin: auto;
+}
+
 .plot {
     display: flex;
     flex-direction: column;

@@ -1,69 +1,218 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <title>Capstone</title>
+  <head>
+    <title>Capstone</title>
 
-        <link rel="stylesheet" href="../static/style.css">
+    <link rel="stylesheet" href="../static/style.css" />
 
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
 
-        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    </head>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  </head>
 
-    <body>
-        <div class="header">
-            <h1>Capstone</h1>
+  <body>
+    <header class="p-3 bg-dark text-white w-100">
+      <div class="container">
+        <div
+          class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start"
+        >
+          <a
+            href="/"
+            class="d-flex align-items-center mb-2 mb-lg-0 text-white text-decoration-none"
+          >
+            <img
+              src="../static/images/visualization.png"
+              alt="PhotoGraph Logo"
+              width="40"
+              height="32"
+            />
+          </a>
+
+          <ul
+            class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0"
+          >
+            <li>
+              <a href="#" class="nav-link px-2 text-secondary">PhotoGraph</a>
+            </li>
+            <li><a href="#" class="nav-link px-2 text-white">Features</a></li>
+            <li><a href="#" class="nav-link px-2 text-white">About</a></li>
+          </ul>
+
+          <form class="col-12 col-lg-auto mb-3 mb-lg-0 me-lg-3">
+            <input
+              type="search"
+              class="form-control form-control-dark"
+              placeholder="Search..."
+              aria-label="Search"
+            />
+          </form>
+
+          <div class="text-end">
+            <button type="button" class="btn btn-outline-light me-2">
+              Login
+            </button>
+            <button type="button" class="btn btn-warning">Sign-up</button>
+          </div>
         </div>
-        <div class="graph-content">
-            <!-- Placeholder for Plotly scatter plot -->
-            <div class="plot">
-                <h3>2D t-SNE Visualization of CLIP Features with CIFAR-10 Images</h3>
-                <div id="plot-2d"></div>
+      </div>
+    </header>
+
+    <div class="container my-4">
+      <div class="row">
+        <!-- 2D Graph -->
+        <div class="col-md-6">
+          <div class="card shadow">
+            <div class="card-body">
+              <h5 class="card-title text-center">
+                2D UMAP Visualization of CLIP Features
+              </h5>
+              <div id="plot-2d" class="graph-container"></div>
             </div>
-            <div class="plot">
-                <h3>3D t-SNE Visualization of CLIP Features with CIFAR-10 Images</h3>
-                <div id="plot-3d"></div>
-            </div>
+          </div>
         </div>
-        <div class="query-content">
-            <form method="POST" enctype="multipart/form-data">
-                <input type="file" name="image" accept="image/*">
-                <label for="k">Top-K:</label>
-                <select name="k">
+
+        <!-- 3D Graph -->
+        <div class="col-md-6">
+          <div class="card shadow">
+            <div class="card-body">
+              <h5 class="card-title text-center">
+                3D UMAP Visualization of CLIP Features
+              </h5>
+              <div id="plot-3d" class="graph-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Query and Results Section -->
+      <div class="row mt-5">
+        <div class="col-12">
+          <div
+            class="query-results-container d-flex flex-row p-4 bg-light border rounded"
+          >
+            <!-- Query Options (1/3 of the space) -->
+            <div class="query-options pe-3" style="flex: 1">
+              <h5 class="mb-3">Query Options</h5>
+
+              <!-- Query Toggle -->
+              <div class="query-toggle mb-4">
+                <label class="form-check-label me-4">
+                  <input
+                    type="radio"
+                    class="form-check-input"
+                    name="query-type"
+                    value="image"
+                    checked
+                    onclick="toggleForm('image')"
+                  />
+                  Image Query
+                </label>
+                <label class="form-check-label">
+                  <input
+                    type="radio"
+                    class="form-check-input"
+                    name="query-type"
+                    value="text"
+                    onclick="toggleForm('text')"
+                  />
+                  Text Query
+                </label>
+              </div>
+
+              <!-- Image Query Form -->
+              <form
+                id="image-query-form"
+                enctype="multipart/form-data"
+                style="display: block; width: 100%"
+                class="mb-3"
+              >
+                <div class="mb-3">
+                  <label for="image" class="form-label">Upload Image:</label>
+                  <input
+                    type="file"
+                    name="image"
+                    id="image"
+                    accept="image/*"
+                    class="form-control"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="k-image" class="form-label">Top-K:</label>
+                  <select name="k" id="k-image" class="form-select">
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3">3</option>
                     <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="7">7</option>
-                    <option value="8">8</option>
-                    <option value="9">9</option>
-                    <option value="10">10</option>
-                </select>
-                <input type="submit" value="Upload">
-            </form>
-        </div>
+                    <option value="5" selected>5</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                  Search
+                </button>
+              </form>
 
-        {% if top_k %}
-        <div class="result-content">
-            <h2>Top {{ top_k|length }} Similar Images:</h2>
-            <div>
-                {% for img in top_k %}
-                <img src="{{ img }}" alt="Similar image" style="width: 100px; height: 100px;">
-                {% endfor %}
+              <!-- Text Query Form -->
+              <form
+                id="text-query-form"
+                style="display: none; width: 100%"
+                class="mb-3"
+              >
+                <div class="mb-3">
+                  <label for="text-query" class="form-label"
+                    >Enter Your Query:</label
+                  >
+                  <input
+                    type="text"
+                    name="text"
+                    id="text-query"
+                    placeholder="Enter your query"
+                    class="form-control"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="k-text" class="form-label">Top-K:</label>
+                  <select name="k" id="k-text" class="form-select">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5" selected>5</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                  Search
+                </button>
+              </form>
             </div>
+
+            <!-- Query Results (2/3 of the space) -->
+            <div id="query-results" class="query-results ps-3" style="flex: 2">
+              <h5 class="mb-3">Query Results</h5>
+              <!-- Dynamic content will be inserted here -->
+            </div>
+          </div>
         </div>
-        {% endif %}
+      </div>
+    </div>
 
-        <script type="text/javascript">
-            let graph2d = {{ graph_json_2d | safe }};
-            Plotly.newPlot('plot-2d', graph2d);
-
-            let graph3d = {{ graph_json_3d | safe }};
-            Plotly.newPlot('plot-3d', graph3d);
-        </script>
-    </body>
+    <script src="{{ url_for('static', filename='plot.js') }}"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"
+    ></script>
+  </body>
 </html>

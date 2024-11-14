@@ -1,192 +1,292 @@
-from flask import Flask, render_template, redirect, request
+from flask import Flask, jsonify, render_template, request
+from sklearn.utils import shuffle
 import torch
 import clip
-import plotly.express as px
 from torchvision import datasets, transforms
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.manifold import TSNE
-import plotly.io as pio
-import numpy as np
-from base64 import b64encode
-from io import BytesIO
 from PIL import Image
-import plotly.graph_objects as go
-import openai
-import requests
-from dotenv import load_dotenv
-import os
-
-# load_dotenv()
+from io import BytesIO
+from base64 import b64encode
+import numpy as np
+import joblib
+import umap
+import time
+from tqdm import tqdm
 
 app = Flask(__name__)
 
-# openai_api_key = os.getenv("OPENAI_API_KEY")
+dataset_path = './images'
 
-# client = openai.Client(openai_api_key)
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
 
-# def generate_image(prompt):
-#     try:
-#         response = client.images.generate(
-#             model='dall-e-3',
-#             prompt=prompt,
-#             size='256x256',
-#             n=1,
-#             quality='standard'
-#         )
-#         image_url = response.data[0].url
-#         return image_url
-#     except Exception as e:
-#         print(f"Error: {e}")
-#         return None
+image_dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+
+# Use a subset if needed
+num_images = 28000
+num_images = min(num_images, len(image_dataset))  # Limit to the first 100 images
+subset = torch.utils.data.Subset(image_dataset, range(num_images))
 
 # Load the CLIP model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)
 
-# Precompute CIFAR-10 features
-cifar_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transforms.Resize((224, 224)))
+# Use DataLoader for batching
+batch_size = 32
+data_loader = torch.utils.data.DataLoader(subset, batch_size=batch_size, shuffle=False)
 
-# global_dataset = None
-# global_features = None
+# Extract features
+# def extract_clip_features(data_loader):
+#     all_features = []
+#     with torch.no_grad():
+#         for images, _ in data_loader:
+#             images = images.to(device)
+#             features = model.encode_image(images)  # Encode images
+#             features /= features.norm(dim=-1, keepdim=True)  # Normalize
+#             all_features.append(features.cpu().numpy())  # Move to CPU
+#     return np.vstack(all_features)  # Stack all batches into one array
 
-# def load_and_preprocess_dataset():
-#     global global_dataset, global_features
-#     # cifar_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transforms.Resize((224, 224)))
-#     global_dataset = load_cifar10_images(num_images=200)
-#     global_features = extract_clip_features(global_dataset)
+def extract_clip_features_with_tqdm(data_loader, model, device):
+    all_features = []
+    total_batches = len(data_loader)
 
-# Function to load limited CIFAR-10 images for visualization (without ToTensor)
-def load_cifar10_images(num_images=100):
-    # transform = transforms.Compose([
-    #     transforms.Resize((224, 224))  # Only resize for visualization, no tensor conversion
-    # ])
-    # full_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
-    return torch.utils.data.Subset(cifar_dataset, range(num_images))
+    print("Starting feature extraction...")
+    start_time = time.time()
 
-# Extract features from dataset using CLIP
-def extract_clip_features(dataset):
-    image_features = []
-    for img, _ in dataset:
-        img = preprocess(img).unsqueeze(0).to(device)  # Apply preprocess during feature extraction
-        with torch.no_grad():
-            feature = model.encode_image(img)
-        feature /= feature.norm(dim=-1, keepdim=True)
-        image_features.append(feature.cpu().numpy())
-    return np.concatenate(image_features, axis=0)
+    with torch.no_grad():
+        for images, _ in tqdm(data_loader, total=total_batches, desc="Extracting Features"):
+            images = images.to(device)
+            features = model.encode_image(images)
+            features /= features.norm(dim=-1, keepdim=True)  # Normalize
+            all_features.append(features.cpu().numpy())  # Move to CPU
 
-# Apply t-SNE to reduce the dimensions of CLIP features
-def apply_tsne(features, n_components=2):
-    tsne = TSNE(n_components=n_components, random_state=42)
-    return tsne.fit_transform(features)
+    total_time = time.time() - start_time  # Total time
+    print(f"Feature extraction completed in {total_time:.2f} seconds.")
 
-# load_and_preprocess_dataset()
+    return np.vstack(all_features)  # Combine all features into one array
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    height = 600
-    width = 600
+def train_umap_with_progress(data, n_components=2, n_epochs=200, random_state=42):
+    """
+    Train a UMAP model with a manually controlled progress bar for epochs.
 
-    # Load CIFAR-10 images and extract features
-    cifar_dataset = load_cifar10_images(num_images=1000)
-    image_features = extract_clip_features(cifar_dataset)
+    Args:
+        data (np.ndarray): Input data for UMAP training.
+        n_components (int): Number of dimensions for UMAP embeddings.
+        n_epochs (int): Total number of epochs for UMAP training.
+        random_state (int): Random seed for reproducibility.
 
-    # Apply t-SNE for 2D and 3D plots
-    tsne_2d = apply_tsne(image_features, n_components=2)
-    tsne_3d = apply_tsne(image_features, n_components=3)
+    Returns:
+        model (umap.UMAP): Trained UMAP model.
+        embeddings (np.ndarray): Low-dimensional embeddings of the input data.
+    """
+    print(f"Training UMAP ({n_components}D) with {n_epochs} epochs...")
 
-    # Prepare the image data for visualization
-    image_list = []
-    for img, _ in cifar_dataset:
-        image_list.append(img)
+    # Initialize UMAP model with a subset of epochs
+    model = umap.UMAP(n_components=n_components, n_epochs=n_epochs, random_state=random_state)
 
-    # Create a 2D scatter plot with images
-    fig_2d = go.Figure()
-    for i, img in enumerate(image_list):
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        img_b64 = f"data:image/png;base64,{b64encode(buffer.getvalue()).decode('utf-8')}"
-        fig_2d.add_layout_image(
-            dict(
-                source=img_b64,
-                xref="x", yref="y",
-                x=tsne_2d[i, 0], y=tsne_2d[i, 1],
-                sizex=0.1, sizey=0.1,
-                xanchor="center", yanchor="middle"
-            )
-        )
+    # Manually track progress
+    with tqdm(total=n_epochs, desc=f"Training UMAP {n_components}D") as pbar:
+        for epoch in range(1, n_epochs + 1):
+            model.n_epochs = epoch
+            model.fit(data)  # Fit the model incrementally
+            pbar.update(1)  # Update the progress bar by 1 epoch
 
-    # Update layout for 2D plot
-    fig_2d.update_layout(
-        # title="2D t-SNE Visualization of CLIP Features with CIFAR-10 Images",
-        xaxis=dict(title='X'),
-        yaxis=dict(title='Y'),
-        height=height,
-        width=width
-    )
+    # Transform the entire dataset
+    embeddings = model.transform(data)
+    return model, embeddings
 
-    # 3D Scatter Plot with markers (images not supported in 3D)
-    fig_3d = go.Figure(data=[go.Scatter3d(
-        x=tsne_3d[:, 0],
-        y=tsne_3d[:, 1],
-        z=tsne_3d[:, 2],
-        mode='markers',
-        marker=dict(size=5, color=tsne_3d[:, 0], colorscale='Viridis', opacity=0.8)
-    )])
+##############################################################################
+# PREPROCESSING
+##############################################################################
 
-    fig_3d.update_layout(
-        # title="3D t-SNE Visualization",
-        scene=dict(
-            xaxis=dict(title='X'),
-            yaxis=dict(title='Y'),
-            zaxis=dict(title='Z')
-        ),
-        height=height,
-        width=width
-    )
+# Get image features
+# print('Extracting features...')
+# # image_features = extract_clip_features(data_loader)
+# image_features = extract_clip_features_with_tqdm(data_loader, model, device)
+# print(f'Extracted features: {image_features.shape}')
 
-    # Convert the plot to JSON to pass to the template
-    graph_json_2d = fig_2d.to_json()
-    graph_json_3d = fig_3d.to_json()
+# # Save image features for reuse
+# np.save("image_features.npy", image_features)
+# print("Saved image features as 'image_features.npy'")
 
-    if request.method == 'POST' and 'image' in request.files:
-        file = request.files['image']
-    
-        if file:
-            # Load the uploaded image and convert to RGB
-            image = Image.open(file.stream).convert("RGB")
+# # Train 2D UMAP with progress
+# umap_model_2d, umap_2d = train_umap_with_progress(image_features, n_components=2, n_epochs=10)
+# joblib.dump(umap_model_2d, "umap_model_2d.pkl")
+# np.save("umap_2d.npy", umap_2d)
 
-            # Preprocess the uploaded image for CLIP
-            uploaded_img = preprocess(image).unsqueeze(0).to(device)
+# # Train 3D UMAP with progress
+# umap_model_3d, umap_3d = train_umap_with_progress(image_features, n_components=3, n_epochs=10)
+# joblib.dump(umap_model_3d, "umap_model_3d.pkl")
+# np.save("umap_3d.npy", umap_3d)
+# print("UMAP models and embeddings saved.")
 
-            # Extract the CLIP features of the uploaded image
+# def image_to_base64(img_tensor, size=(64, 64), quality=70):  # Adjust quality
+#     img = transforms.ToPILImage()(img_tensor).resize(size)
+#     buffer = BytesIO()
+#     img.save(buffer, format="JPEG", quality=quality)  # Save as JPEG
+#     return f"data:image/jpeg;base64,{b64encode(buffer.getvalue()).decode()}"
+
+# print("Converting images to Base64...")
+# image_b64_list = []
+# for img, _ in tqdm(subset, desc="Encoding Images", total=len(subset)):
+#     image_b64_list.append(image_to_base64(img))
+# np.save("image_b64_list.npy", image_b64_list)  # Save the Base64 strings
+# print("Base64 encoding complete.")
+
+##############################################################################
+# LOADING
+##############################################################################
+
+# Load precomputed data
+image_features = np.load("image_features.npy")
+image_b64_list = np.load("image_b64_list.npy", allow_pickle=True).tolist()
+umap_2d = np.load("umap_2d.npy")
+umap_3d = np.load("umap_3d.npy")
+
+# Load UMAP models
+umap_model_2d = joblib.load("umap_model_2d.pkl")
+umap_model_3d = joblib.load("umap_model_3d.pkl")
+
+@app.route('/query', methods=['POST'])
+def query():
+    try:
+        query_type = request.form.get('type') or (request.json or {}).get('type')
+        print(f"Received query type: {query_type}")
+
+        if query_type not in ['image', 'text']:
+            return jsonify({"error": "Invalid query type. Must be 'image' or 'text'"}), 400
+
+        if query_type == 'text':
+            # Handle text query
+            data = request.get_json() or {}
+            query_text = data.get('text', '')
+            k = int(data.get('k', 5))
+
+            if not query_text:
+                return jsonify({"error": "Text query is required"}), 400
+
+            print(f"Processing text query: {query_text}, Top-K: {k}")
+
+            # Extract text features
             with torch.no_grad():
-                uploaded_img_features = model.encode_image(uploaded_img)
-            uploaded_img_features /= uploaded_img_features.norm(dim=-1, keepdim=True)
+                text_tokens = clip.tokenize([query_text]).to(device)
+                text_features = model.encode_text(text_tokens)
+                text_features /= text_features.norm(dim=-1, keepdim=True)
 
-            # Convert features to numpy and ensure they are 2D
-            uploaded_img_features = uploaded_img_features.cpu().numpy().squeeze()  # Shape: [n_features]
+            # Compute similarity scores
+            similarity = torch.nn.functional.cosine_similarity(
+                torch.tensor(image_features).to(device), text_features, dim=1
+            )
 
-            # Calculate cosine similarity between the uploaded image and CIFAR-10 dataset
-            # cifar_dataset = load_cifar10_images(num_images=100)
-            # cifar_features = extract_clip_features(cifar_dataset)
-            similarities = cosine_similarity(uploaded_img_features.reshape(1, -1), image_features)
+            # Find the top-K most similar images
+            top_k_indices = torch.topk(similarity, k, largest=True).indices.tolist()
 
-            # Get top-K most similar images
-            K = int(request.form.get('k', 5))  # Get 'k' from the form, default to 5
-            top_k_indices = similarities.argsort()[0][-K:][::-1]
+            # Transform text features to t-SNE coordinates
+            umap_2d_query = umap_model_2d.transform(text_features.cpu().numpy())[0]
+            umap_3d_query = umap_model_3d.transform(text_features.cpu().numpy())[0]
 
-            # Get the top-K images from CIFAR-10
-            top_k_images = [cifar_dataset[i][0] for i in top_k_indices]
+            # Prepare the top-K results
+            top_k_results = [
+                {
+                    "x": float(umap_2d[i, 0]),
+                    "y": float(umap_2d[i, 1]),
+                    "z": float(umap_3d[i, 2]),
+                    "image": image_b64_list[i]
+                }
+                for i in top_k_indices
+            ]
 
-            # Convert top-K images to base64 to display on the frontend
-            top_k_b64_images = []
-            for img in top_k_images:
-                buffer = BytesIO()
-                img.save(buffer, format="PNG")
-                img_b64 = b64encode(buffer.getvalue()).decode('utf-8')
-                top_k_b64_images.append(f"data:image/png;base64,{img_b64}")
-            
-            # Render the results page with top-K similar images
-            return render_template('index.html', top_k=top_k_b64_images, graph_json_2d=graph_json_2d, graph_json_3d=graph_json_3d)
+            response = {
+                "query_point": {
+                    "x_2d": float(umap_2d_query[0]),
+                    "y_2d": float(umap_2d_query[1]),
+                    "x_3d": float(umap_3d_query[0]),
+                    "y_3d": float(umap_3d_query[1]),
+                    "z_3d": float(umap_3d_query[2]),
+                },
+                "top_k_results": top_k_results,
+                "query_type": query_type,
+                "query_text": query_text,
+            }
+            return jsonify(response)
 
-    return render_template('index.html', graph_json_2d=graph_json_2d, graph_json_3d=graph_json_3d)
+        elif query_type == 'image':
+            # Handle image query
+            if 'image' not in request.files:
+                return jsonify({"error": "Image is required for image query"}), 400
+
+            file = request.files['image']
+            k = int(request.form.get('k', 5))
+
+            print(f"Processing image query: File received: {file.filename}, Top-K: {k}")
+
+            # Preprocess the uploaded image
+            image = Image.open(file.stream).convert("RGB")
+            img_tensor = preprocess(image).unsqueeze(0).to(device)
+
+            # Extract features for the query image
+            with torch.no_grad():
+                query_features = model.encode_image(img_tensor)
+                query_features /= query_features.norm(dim=-1, keepdim=True)
+
+            # Compute similarity scores
+            similarity = torch.nn.functional.cosine_similarity(
+                torch.tensor(image_features).to(device), query_features, dim=1
+            )
+
+            # Find the top-K most similar images
+            top_k_indices = torch.topk(similarity, k, largest=True).indices.tolist()
+
+            # Transform image features to t-SNE coordinates
+            umap_2d_query = umap_model_2d.transform(query_features.cpu().numpy())[0]
+            umap_3d_query = umap_model_3d.transform(query_features.cpu().numpy())[0]
+
+            # Prepare the top-K results
+            top_k_results = [
+                {
+                    "x": float(umap_2d[i, 0]),
+                    "y": float(umap_2d[i, 1]),
+                    "z": float(umap_3d[i, 2]),
+                    "image": image_b64_list[i]
+                }
+                for i in top_k_indices
+            ]
+
+            response = {
+                "query_point": {
+                    "x_2d": float(umap_2d_query[0]),
+                    "y_2d": float(umap_2d_query[1]),
+                    "x_3d": float(umap_3d_query[0]),
+                    "y_3d": float(umap_3d_query[1]),
+                    "z_3d": float(umap_3d_query[2]),
+                },
+                "top_k_results": top_k_results,
+                "query_type": query_type,
+                "query_text": query_text,
+            }
+            return jsonify(response)
+
+    except Exception as e:
+        print(f"Error processing query: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/plot-data', methods=['GET'])
+def get_plot_data():
+    # Send dot positions and image data
+    dots_data = [
+        {
+            "x": float(umap_2d[i, 0]),
+            "y": float(umap_2d[i, 1]),
+            "z": float(umap_3d[i, 2]),
+            "image": image_b64_list[i]
+        } for i in range(len(subset))
+    ]
+    return jsonify(dots_data)
+
+@app.route('/')
+def index():
+    return render_template('index.html')  # Serve the HTML template
+
+if __name__ == '__main__':
+    app.run(debug=True)
